@@ -1,21 +1,20 @@
 
-
-
-
 ##Main scripts that call individual data/ functions to produce varuos SysRi results in percentiles and raw
+## Load, clean, manipulate, and save results
 
 ##@Auther: Harry Peng Zhao
 
 ##===========================================
-##0. Load, clean, manipulate, and save results
+##0. Setup
 ##===========================================
 
 rm(list = ls())
 
 setwd("Q:/DATA/SPRAIMU/4_SysRisk/R Code")
 folder <- "Q:/DATA/SPRAIMU/4_SysRisk/Data/"
-by_country <- TRUE     ##Calculate country-wise/group percentiles
-suffix <- "_ptile"
+saveFolder <- "Q:/DATA/SPRAIMU/4_SysRisk/Data/Output/"
+daily_price_folder <- 'Q:/DATA/SPRAIMU/4_SysRisk/Data/Input_Databases/Bloomberg/'
+daily_price_file <- 'SysRisk_Market_Bloomberg Data.xlsx'
 
 library(tidyr)
 library(dplyr)
@@ -23,13 +22,12 @@ library(stringr)
 library(lubridate)
 library(openxlsx)
 
-source('clean_excel.R')
-source('calc_percentile_panel.R')
-source('calc_2_table.R')
-source('calc_growth.R')
-source('calc_vol.R')
-source('back_fill.R')
-source('to_wide.R')
+myfunc <-c('clean_excel.R','clean_excel_transpose.R','back_fill.R','annual_to_quarter.R',
+           'calc_2_table.R','merge_2_table.R',
+           'calc_trailing_sum.R','calc_growth.R','calc_vol.R',
+           'to_wide.R','to_long.R','calc_percentile_panel.R')
+
+lapply(myfunc, source)
 
 ##==========================================
 ## 1.1 Bank Loan by Private Sector to GDP
@@ -38,7 +36,7 @@ source('to_wide.R')
 # Load GDP
 file <- "Input_GDP.xlsx"
 range <- "A3:IV196"
-dt_GDP <-
+df_GDP <-
     clean_excel(
         folder = folder,
         file = file,
@@ -56,7 +54,7 @@ sheet[c("L_HH", "L_ONC")] <-
 sheet[c("F_HH", "F_ONC")] <-
     list("FX_LOANS_HH_Q", "FX_LOANS_ONC_Q")    #Foreign Currency
 
-dt_BL <-
+df_BL <-
     lapply (
         sheet,
         clean_excel,
@@ -67,15 +65,15 @@ dt_BL <-
     ) # Bank Loans Sector, Currency
 
 # Add up LC and FX loans for each sector
-dt_BL_Private <- list()
-dt_BL_Private["HH"] <-
-    list(calc_2_table(dt_BL$L_HH, dt_BL$F_HH, operator = '+')) ##HouseHold Banks Loans
-dt_BL_Private["ONC"] <-
-    list(calc_2_table(dt_BL$L_ONC, dt_BL$F_ONC, operator = '+')) ## Other Non-Financial
+df_BL_Private <- list()
+df_BL_Private["HH"] <-
+    list(calc_2_table(df_BL$L_HH, df_BL$F_HH, operator = '+')) ##HouseHold Banks Loans
+df_BL_Private["ONC"] <-
+    list(calc_2_table(df_BL$L_ONC, df_BL$F_ONC, operator = '+')) ## Other Non-Financial
 
 ## Calculate Ratio to GDP for each sector
-dt_BL_Private_v_GDP <-
-    lapply(dt_BL_Private, calc_2_table, dt_GDP, operator = '/')
+df_BL_Private_v_GDP <-
+    lapply(df_BL_Private, calc_2_table, df_GDP, operator = '/')
 
 
 ##=====================================================
@@ -83,13 +81,13 @@ dt_BL_Private_v_GDP <-
 ##=====================================================
 
 ## Calculate Ratio of FX/overall bank loan
-dt_BL_F <- dt_BL[c("F_HH"  , "F_ONC")]
-#dt_BL_F[["F_ALL"]]<- dt_F_ALL
+df_BL_F <- df_BL[c("F_HH"  , "F_ONC")]
+#df_BL_F[["F_ALL"]]<- df_F_ALL
 
-dt_BL_Private_FX_v_TOT <-
+df_BL_Private_FX_v_TOT <-
     mapply(calc_2_table,
-           dt_BL_F,
-           dt_BL_Private,
+           df_BL_F,
+           df_BL_Private,
            operator = '/',
            SIMPLIFY = FALSE)
 
@@ -100,7 +98,7 @@ dt_BL_Private_FX_v_TOT <-
 # Load CPI index
 file <- "Input_CPI.xlsx"
 range <- "A3:IV196"
-dt_CPI <-
+df_CPI <-
     clean_excel(
         folder = folder,
         file = file,
@@ -110,9 +108,9 @@ dt_CPI <-
     )
 
 # Calculate real growth
-dt_BL_Private_g <-
-    lapply(dt_BL_Private, calc_2_table, dt_CPI, operator = '/')
-dt_BL_Private_g <- lapply(dt_BL_Private_g, calc_growth)
+df_BL_Private_g <-
+    lapply(df_BL_Private, calc_2_table, df_CPI, operator = '/')
+df_BL_Private_g <- lapply(df_BL_Private_g, calc_growth, lags = 4)
 
 ##==========================================
 ##2.1 Bank Loan to Public Sector to GDP
@@ -126,7 +124,7 @@ sheet[c("LOAN_CG", "LOAN_PC", "LOAN_LG")] <-
     list("NC_LOANS_CG_Q", "NC_LOANS_PNC_Q", "NC_LOANS_LG_Q")
 # Bank Loans to Central Gov, Public Companies, Local Government
 
-dt_BL <-
+df_BL <-
     lapply (
         sheet,
         clean_excel,
@@ -137,38 +135,37 @@ dt_BL <-
     ) # Bank Loans Sector
 
 # Add up bank loans to all public sectors
-dt_BL_Public <- list()
+df_BL_Public <- list()
 
-dt_BL_Public["PUB"] <-
-    list(calc_2_table(dt_BL$LOAN_CG, dt_BL$LOAN_PC, operator = '+'))
-dt_BL_Public["PUB"] <-
-    list(calc_2_table(dt_BL_Public$PUB, dt_BL$LOAN_LG, operator = '+'))
+df_BL_Public["PUB"] <-
+    list(calc_2_table(df_BL$LOAN_CG, df_BL$LOAN_PC, operator = '+'))
+df_BL_Public["PUB"] <-
+    list(calc_2_table(df_BL_Public$PUB, df_BL$LOAN_LG, operator = '+'))
 
 ## Calculate Ratio to GDP for each sector
-dt_BL_Public_v_GDP <-
-    lapply(dt_BL_Public, calc_2_table, dt_GDP, operator = '/')
+df_BL_Public_v_GDP <-
+    lapply(df_BL_Public, calc_2_table, df_GDP, operator = '/')
 
 ## Calculate Real growth
 
-dt_BL_Public_g <-
-    lapply(dt_BL_Public, calc_2_table, dt_CPI, operator = '/')
-dt_BL_Public_g <- lapply(dt_BL_Public_g, calc_growth)
+df_BL_Public_g <-
+    lapply(df_BL_Public, calc_2_table, df_CPI, operator = '/')
+df_BL_Public_g <- lapply(df_BL_Public_g, calc_growth, lags = 4)
 
 ##==========================================
 ##2.2 Bank Loan Sector to Total
 ##==========================================
 
-dt_BL_ALL_Sector <- list()
-dt_BL_ALL_Sector[c('HH', 'ONC', 'PUB')] <-
-    list(dt_BL_Private$HH, dt_BL_Private$ONC, dt_BL_Public$PUB)
+df_BL_ALL_Sector <- list()
+df_BL_ALL_Sector[c('HH', 'ONC', 'PUB')] <-
+    list(df_BL_Private$HH, df_BL_Private$ONC, df_BL_Public$PUB)
 
-dt_BL_ALL <-
-    calc_2_table(dt_BL_ALL_Sector$HH, dt_BL_ALL_Sector$ONC, '+')
-dt_BL_ALL <- calc_2_table(dt_BL_ALL, dt_BL_ALL_Sector$PUB, '+')
+df_BL_ALL <-
+    calc_2_table(df_BL_ALL_Sector$HH, df_BL_ALL_Sector$ONC, '+')
+df_BL_ALL <- calc_2_table(df_BL_ALL, df_BL_ALL_Sector$PUB, '+')
 
-dt_BL_ALL_Sector_v_ALL <-
-    lapply(dt_BL_ALL_Sector, calc_2_table, dt_BL_ALL, operator = '/')
-
+df_BL_ALL_Sector_v_ALL <-
+    lapply(df_BL_ALL_Sector, calc_2_table, df_BL_ALL, operator = '/')
 
 
 ##==========================================================
@@ -184,7 +181,7 @@ sheet[c("L_HH", "L_ONC")] <-
 sheet[c("F_HH", "F_ONC")] <-
     list("FX_LOANS_HH_Q", "FX_LOANS_ONC_Q")      #Foreign Currency
 
-dt_OFIL <-
+df_OFIL <-
     lapply (
         sheet,
         clean_excel,
@@ -195,28 +192,28 @@ dt_OFIL <-
     ) # Bank Loans Sector, Currency
 
 # Add up LC and FX loans for each sector
-dt_OFIL_Sector <- list()
+df_OFIL_Sector <- list()
 
-dt_OFIL_Sector["HH"] <-
-    list(calc_2_table(dt_OFIL$L_HH, dt_OFIL$F_HH, operator = '+')) ##HouseHold Banks Loans
-dt_OFIL_Sector["ONC"] <-
-    list(calc_2_table(dt_OFIL$L_ONC, dt_OFIL$F_ONC, operator = '+')) ## Other Non-Financial
+df_OFIL_Sector["HH"] <-
+    list(calc_2_table(df_OFIL$L_HH, df_OFIL$F_HH, operator = '+')) ##HouseHold Banks Loans
+df_OFIL_Sector["ONC"] <-
+    list(calc_2_table(df_OFIL$L_ONC, df_OFIL$F_ONC, operator = '+')) ## Other Non-Financial
 
-dt_OFIL_Sector["PRV"] <-
-    list(calc_2_table(dt_OFIL_Sector$HH, dt_OFIL_Sector$ONC , operator = '+'))   ## Private Sector
+df_OFIL_Sector["PRV"] <-
+    list(calc_2_table(df_OFIL_Sector$HH, df_OFIL_Sector$ONC , operator = '+'))   ## Private Sector
 
 ## Calculate Ratio to GDP for each sector
-dt_OFIL_Sector_v_GDP <-
-    lapply(dt_OFIL_Sector, calc_2_table, dt_GDP, operator = '/')
+df_OFIL_Sector_v_GDP <-
+    lapply(df_OFIL_Sector, calc_2_table, df_GDP, operator = '/')
 
 ##============================================================================
 ##3.2 Other Financial Institution Loan by Sector Growth adjusted by CPI index
 ##============================================================================
 
 # Calculate real growth
-dt_OFIL_Secotr_g <-
-    lapply(dt_OFIL_Sector, calc_2_table, dt_CPI, operator = '/')
-dt_OFIL_Secotr_g <- lapply(dt_OFIL_Secotr_g, calc_growth)
+df_OFIL_Secotr_g <-
+    lapply(df_OFIL_Sector, calc_2_table, df_CPI, operator = '/')
+df_OFIL_Secotr_g <- lapply(df_OFIL_Secotr_g, calc_growth, lags = 4)
 
 
 ##==========================================
@@ -225,8 +222,9 @@ dt_OFIL_Secotr_g <- lapply(dt_OFIL_Secotr_g, calc_growth)
 
 # Load FSI file
 file <- "Input_FSI.xlsx"
-range <- "A6:IV196"
+range <- "A9:IV206"
 sheet <- list()
+
 sheet[c(
     'CAR',
     'Leverage_Rat',
@@ -240,19 +238,19 @@ sheet[c(
     'FX_Liability'
 )] <-
     list(
-        'CAR',
-        'Leverage_Rat',
-        'NPL_PRO',
-        'LIQ_Ass_ST_Liab',
-        'NPL_TOT',
-        'ROA',
-        'L_D_Ratio',
-        'FX_CAP',
-        'FX_Loans',
-        'FX_Liability'
+        'CAR_Q',
+        'Leverage_Rat_Q',
+        'NPL_PRO_Q',
+        'LIQ_Ass_ST_Liab_Q',
+        'NPL_TOT_Q',
+        'ROA_Q',
+        'L_D_Ratio_Q',
+        'FX_CAP_Q',
+        'FX_Loans_Q',
+        'FX_Liability_Q'
     )
 
-dt_FSI <-
+df_FSI_Q <-
     lapply(
         sheet,
         clean_excel,
@@ -261,31 +259,54 @@ dt_FSI <-
         range = range,
         freq = "Q"
     )
-##==========================================
-##5. Net Foreign Asset % GDP
-##==========================================
-# Load GDP
-# file<- "Input_GDP.xlsx"
-# range<- "A3:IV196"
-# dt_GDP<- clean_excel(folder=folder, file=file, sheet= "GDP_Q", range= range, freq ="Q")
-#
-# # Load NFA sheet
-# file<- "Input_OthVar.xlsx"
-# range<- "A3:IV196"
-# sheet<-list()
-# sheet[c('NFA_Q')]<- list('NFA_Q')
-#
-# dt_NFA<- lapply(sheet, clean_excel, folder=folder, file=file, range= range, freq ="Q")
-# dt_NFA_v_GDP<- lapply(dt_NFA, calc_2_table, dt_GDP, operator ='/')
-#
-# # Calculate percentile and save
-# dt_NFA_v_GDP_ptile <- lapply(dt_NFA_v_GDP, function(x) calc_percentile_panel(x,'NFA_Q/GDP_Q') )
-# names(dt_NFA_v_GDP_ptile)<- paste(names(dt_NFA_v_GDP),"_", suffix, sep ='')
-#
-# saveData<- append(saveData, dt_NFA_v_GDP_ptile)
-#
-# rm(list = ls()[grep("dt_", ls())] )
-# rm(sheet, formulaList)
+
+sheet<- list()
+
+sheet[c(
+    'CAR',
+    'Leverage_Rat',
+    'NPL_PRO',
+    'LIQ_Ass_ST_Liab',
+    'NPL_TOT',
+    'ROA',
+    'L_D_Ratio',
+    'FX_CAP',
+    'FX_Loans',
+    'FX_Liability'
+)] <-
+    list(
+        'CAR_A',
+        'Leverage_Rat_A',
+        'NPL_PRO_A',
+        'LIQ_Ass_ST_Liab_A',
+        'NPL_TOT_A',
+        'ROA_A',
+        'L_D_Ratio_A',
+        'FX_CAP_A',
+        'FX_Loans_A',
+        'FX_Liability_A'
+    )
+
+df_FSI_A <-
+    lapply(
+        sheet,
+        clean_excel,
+        folder = folder,
+        file = file,
+        range = range,
+        freq = "Q"
+    )
+
+# Some rename of annual table
+df_FSI_A <- lapply(df_FSI_A, mutate, Year = year(Quarter))
+df_FSI_A <- lapply(df_FSI_A, select, -Quarter)
+
+# Merge Quarterly with annual
+df_FSI <- mapply(merge_2_table, df_FSI_A, df_FSI_Q, SIMPLIFY = FALSE)
+
+# Some formatting
+df_FSI$FX_CAP$FX_CAP_Q <- abs(df_FSI$FX_CAP$FX_CAP_Q) # Take absolute value of Net open FX position to capital
+df_FSI$L_D_Ratio$L_D_Ratio_Q <- 10000/df_FSI$L_D_Ratio$L_D_Ratio_Q # Convert FSI Deposit-to-Loan ratio to Loan-to-Deposit
 
 ##==============================================
 ##6.1 External Debt by Sector (Short-term % All)
@@ -316,7 +337,7 @@ sheet[c(
         'LOAN_LT_OTH'
     ) #Name convention: Security Type_Term_ReceiveEntity
 
-dt_Exn_Debt <-
+df_Exn_Debt <-
     lapply(
         sheet,
         clean_excel,
@@ -327,36 +348,36 @@ dt_Exn_Debt <-
     )
 
 # Add up loans and securities for ST and LT in each sector
-dt_Exn_Debt_ST <- list()
-dt_Exn_Debt_ST["GOV"] <-
-    list(calc_2_table(dt_Exn_Debt$SEC_ST_GOV, dt_Exn_Debt$LOAN_ST_GOV, operator =
+df_Exn_Debt_ST <- list()
+df_Exn_Debt_ST["GOV"] <-
+    list(calc_2_table(df_Exn_Debt$SEC_ST_GOV, df_Exn_Debt$LOAN_ST_GOV, operator =
                           '+'))
-dt_Exn_Debt_ST["OTH"] <-
-    list(calc_2_table(dt_Exn_Debt$SEC_ST_OTH, dt_Exn_Debt$LOAN_ST_OTH, operator =
+df_Exn_Debt_ST["OTH"] <-
+    list(calc_2_table(df_Exn_Debt$SEC_ST_OTH, df_Exn_Debt$LOAN_ST_OTH, operator =
                           '+'))
 
-dt_Exn_Debt_LT <- list()
-dt_Exn_Debt_LT["GOV"] <-
-    list(calc_2_table(dt_Exn_Debt$SEC_LT_GOV, dt_Exn_Debt$LOAN_LT_GOV, operator =
+df_Exn_Debt_LT <- list()
+df_Exn_Debt_LT["GOV"] <-
+    list(calc_2_table(df_Exn_Debt$SEC_LT_GOV, df_Exn_Debt$LOAN_LT_GOV, operator =
                           '+'))
-dt_Exn_Debt_LT["OTH"] <-
-    list(calc_2_table(dt_Exn_Debt$SEC_LT_OTH, dt_Exn_Debt$LOAN_LT_OTH, operator =
+df_Exn_Debt_LT["OTH"] <-
+    list(calc_2_table(df_Exn_Debt$SEC_LT_OTH, df_Exn_Debt$LOAN_LT_OTH, operator =
                           '+'))
 
 # Add up ST and LT in each sector
-dt_Exn_Debt_Sector <- list()
-dt_Exn_Debt_Sector["GOV"] <-
-    list(calc_2_table(dt_Exn_Debt_ST$GOV, dt_Exn_Debt_LT$GOV, operator = '+'))
-dt_Exn_Debt_Sector["OTH"] <-
-    list(calc_2_table(dt_Exn_Debt_ST$OTH, dt_Exn_Debt_LT$OTH, operator = '+'))
+df_Exn_Debt_Sector_USD <- list()
+df_Exn_Debt_Sector_USD["GOV"] <-
+    list(calc_2_table(df_Exn_Debt_ST$GOV, df_Exn_Debt_LT$GOV, operator = '+'))
+df_Exn_Debt_Sector_USD["OTH"] <-
+    list(calc_2_table(df_Exn_Debt_ST$OTH, df_Exn_Debt_LT$OTH, operator = '+'))
 
 # Calculate Short-Term Debt as % of Total External Debt for each sector (Loans & Debt Securities)
-dt_Exn_Debt_ST_v_ALL_Sector <- list()
-dt_Exn_Debt_ST_v_ALL_Sector['GOV'] <-
-    list(calc_2_table(dt_Exn_Debt_ST$GOV, dt_Exn_Debt_Sector$GOV, operator =
+df_Exn_Debt_ST_v_ALL_Sector <- list()
+df_Exn_Debt_ST_v_ALL_Sector['GOV'] <-
+    list(calc_2_table(df_Exn_Debt_ST$GOV, df_Exn_Debt_Sector_USD$GOV, operator =
                           '/'))
-dt_Exn_Debt_ST_v_ALL_Sector['OTH'] <-
-    list(calc_2_table(dt_Exn_Debt_ST$OTH, dt_Exn_Debt_Sector$OTH, operator =
+df_Exn_Debt_ST_v_ALL_Sector['OTH'] <-
+    list(calc_2_table(df_Exn_Debt_ST$OTH, df_Exn_Debt_Sector_USD$OTH, operator =
                           '/'))
 
 
@@ -364,11 +385,10 @@ dt_Exn_Debt_ST_v_ALL_Sector['OTH'] <-
 ##6.2 External Debt Growth adjusted by CPI index
 ##==============================================
 
-
 # Load FX rate
 file <- "Input_Ext_Debt.xlsx"
 range <- "A6:IV196"
-dt_FX <-
+df_FX <-
     clean_excel(
         folder = folder,
         file = file,
@@ -380,7 +400,7 @@ dt_FX <-
 # Load CPI index
 file <- "Input_CPI.xlsx"
 range <- "A3:IV196"
-dt_CPI <-
+df_CPI <-
     clean_excel(
         folder = folder,
         file = file,
@@ -390,46 +410,35 @@ dt_CPI <-
     )
 
 # Calculate external debt in local currency
-dt_Exn_Debt_Sector <-
-    lapply(dt_Exn_Debt_Sector, calc_2_table, dt_FX, operator = '*')
+df_Exn_Debt_Sector <-
+    lapply(df_Exn_Debt_Sector_USD, calc_2_table, df_FX, operator = '*')
 
 # Calculate real growth
-dt_Exn_Debt_Sector_g <-
-    lapply(dt_Exn_Debt_Sector, calc_2_table, dt_CPI, operator = '/')
+df_Exn_Debt_Sector_g <-
+    lapply(df_Exn_Debt_Sector, calc_2_table, df_CPI, operator = '/')
 
-dt_Exn_Debt_Sector_g <- lapply(dt_Exn_Debt_Sector_g, calc_growth)
+df_Exn_Debt_Sector_g <- lapply(df_Exn_Debt_Sector_g, calc_growth, lags = 4)
 
 
 ##==========================================
 ##6.3 External Debt by Sector, % of GDP
 ##==========================================
 
-# Load GDP
-file <- "Input_GDP.xlsx"
-range <- "A3:IV196"
-dt_GDP <-
-    clean_excel(
-        folder = folder,
-        file = file,
-        sheet = "GDP_Q",
-        range = range,
-        freq = "Q"
-    )
-
 ## Calculate Ratio to GDP for each sector
-dt_Exn_Debt_Sector_v_GDP <-
-    lapply(dt_Exn_Debt_Sector, calc_2_table, dt_GDP, operator = '/')
+df_Exn_Debt_Sector_GDP <-
+    lapply(df_Exn_Debt_Sector, calc_2_table, df_GDP, operator = '/')
 
 ##==========================================
 ##7.1 Government Debt to GDP
 ##==========================================
 
-# Load Government Debt to GDP sheet
+# Load Government Debt sheet
 file <- "Input_Gov.xlsx"
 range <- "A3:IV196"
 sheet <- list()
-sheet[c('GOV_Debt_GDP_Q')] <- list('GOV_Debt_GDP_Q')
-dt_Gov_Debt_v_GDP <-
+sheet[c('GOV_Debt')] <- list('GOV_Debt')
+
+df_GOV_Debt <-
     lapply(
         sheet,
         clean_excel,
@@ -439,42 +448,14 @@ dt_Gov_Debt_v_GDP <-
         freq = "Q"
     )
 
-##==========================================
-##7.2 Fiscal Balance to GDP
-##==========================================
+## Calculate Ratio to GDP
+df_Gov_Debt_v_GDP <- lapply(df_GOV_Debt, calc_2_table, df_GDP, operator = '/')
 
-# Load Fiscal Balance sheet
-file <- "Input_Gov.xlsx"
-range <- "A3:IV196"
-sheet <- list()
-sheet[c('FB_Q')] <- list('FB_Q')
+##==================================================
+##7.2 External Government Debt/ Total Government Debt
+##===================================================
 
-dt_FB <-
-    lapply(
-        sheet,
-        clean_excel,
-        folder = folder,
-        file = file,
-        range = range,
-        freq = "Q"
-    )
-
-# Load GDP
-file <- "Input_GDP.xlsx"
-range <- "A3:IV196"
-
-dt_GDP <-
-    clean_excel(
-        folder = folder,
-        file = file,
-        sheet = "GDP_Q",
-        range = range,
-        freq = "Q"
-    )
-
-## Calculate Ratio to GDP for each sector
-dt_FB_v_GDP <- lapply(dt_FB, calc_2_table, dt_GDP, operator = '/')
-
+df_Gov_Ext_v_Debt <- lapply(df_Exn_Debt_Sector[1], calc_2_table, df_GOV_Debt$GOV_Debt, operator = '/')
 
 ##==========================================
 ##8.1 BOP Net FLows
@@ -488,7 +469,7 @@ sheet <- list()
 sheet[c('BOP_OF_GDP', 'BOP_NOF_GDP', 'BOP_DT_GDP')] <-
     list('BOP_OF_GDP', 'BOP_NOF_GDP', 'BOP_DT_GDP')
 
-dt_BOP <-
+df_BOP <-
     lapply(
         sheet,
         clean_excel,
@@ -498,14 +479,13 @@ dt_BOP <-
         freq = "Q"
     )
 
-
 ##==========================================
 ##8.2 REER Grwoth
 ##==========================================
 
 # Load REER value
 sheet <- c('REER')
-dt_REER <-
+df_REER <-
     lapply(
         sheet,
         clean_excel,
@@ -516,7 +496,7 @@ dt_REER <-
     )
 
 # Calculate REER growth
-dt_REER_g <- lapply(dt_REER, calc_growth)
+df_REER_g <- lapply(df_REER, calc_growth, lags = 4)
 
 ##==========================================
 ##9.1 Housing Real Price Growth
@@ -526,7 +506,7 @@ dt_REER_g <- lapply(dt_REER, calc_growth)
 file <- "Input_Housing.xlsx"
 range <- "A3:IV196"
 sheet <- c('REAL_PRICE')
-dt_RHP <-
+df_RHP <-
     lapply(
         sheet,
         clean_excel,
@@ -537,7 +517,7 @@ dt_RHP <-
     )
 
 # Calculate growth
-dt_RHP_g <- lapply(dt_RHP, calc_growth)
+df_RHP_g <- lapply(df_RHP, calc_growth, lags = 4)
 
 ##==========================================
 ##9.2 Housing Valuation Ratios
@@ -547,7 +527,7 @@ dt_RHP_g <- lapply(dt_RHP, calc_growth)
 sheet <- list()
 sheet[c('PRICE_RENT', 'PRICE_INCOME')] <-
     list('PRICE_RENT', 'PRICE_INCOME')
-dt_HV <-
+df_HV <-
     lapply(
         sheet,
         clean_excel,
@@ -558,16 +538,16 @@ dt_HV <-
     )
 
 
-##==========================================
+##===============================================
 ##10. Credit-GDP Gap and Credit/GDP change/growth
-##==========================================
+##===============================================
 
 # Load Credit Gap, etc
 file <- 'Input_CreditGDP.xlsx'
 sheet <- list()
-sheet[c('Credit_Gap', 'Credit_GDP_Change','Credit_GDP_Growth')] <-
-    list('Credit_Gap', 'Credit_GDP_Change','Credit_GDP_Growth')
-dt_Credit <-
+sheet[c('Credit_Gap_HP', 'Credit_GDP_Change','Credit_GDP_Growth','Credit_Gap_Cubic','Credit_Growth')] <-
+    list('Credit_Gap_HP', 'Credit_GDP_Change','Credit_GDP_Growth','Credit_Gap_Cubic','Credit_Growth')
+df_Credit <-
     lapply(
         sheet,
         clean_excel,
@@ -577,15 +557,24 @@ dt_Credit <-
         freq = "Q"
     )
 
-# Load Credit Growth
-sheet <- list()
-sheet[c('Credit_Growth')] <-
-    list('Credit_Growth')
-dt_Credit_Growth <- lapply(sheet, clean_excel, folder = folder, file = file, range = range, freq = "Q")
+# Calculate Real Credit Growth
+df_CPI_Growth <- calc_growth(df_CPI, lags= 4) #calculate yoy growth
+Credit_Real_Growth <- lapply(df_Credit[5], calc_2_table, df_CPI_Growth, operator ='-')
+df_Credit["Credit_Real_Growth"]<- Credit_Real_Growth 
+    
+# Calculate Flags by Del'Ariccia
+Credit_Flag1 <- full_join(df_Credit$Credit_Gap_Cubic, df_Credit$Credit_GDP_Growth, by =c('Country','Code','Quarter'))
 
-dt_CPI_Growth <- calc_growth(dt_CPI, q_lag= 4) #calculate yoy growth
-dt_Credit_Real_Growth <- lapply(dt_Credit_Growth, calc_2_table, dt_CPI_Growth, operator ='-')
+Credit_Flag1 <- Credit_Flag1%>%
+    mutate(Flag = Credit_Gap_Cubic>1.5 & Credit_GDP_Growth > 10 )%>%
+    select(-c(Credit_Gap_Cubic, Credit_GDP_Growth))
 
+Credit_Flag2 <- df_Credit$Credit_GDP_Growth%>%
+    mutate(Flag = Credit_GDP_Growth > 20)%>%
+    select(-Credit_GDP_Growth)
+
+df_Credit['Flag1'] <- list(Credit_Flag1)
+df_Credit['Flag2'] <- list(Credit_Flag2)
 
 ##==========================================
 ##11. ARA Metric
@@ -596,7 +585,7 @@ file <- "SPRIRU_ARA_METRIC.xlsx"
 range <- "G201:IV396"
 sheet <- list()
 sheet[c('ARA_A')] <- list('ARA')
-dt_ARA_A <-
+df_ARA_A <-
     lapply(
         sheet,
         clean_excel,
@@ -607,20 +596,8 @@ dt_ARA_A <-
     )
 
 #Convert annual data to quarterly data
-dt_ARA_Q <- list()
-dt_ARA_Q[['ARA']] <- dt_ARA_A$ARA %>%
-    mutate(
-        Q.1 = ARA,
-        Q.2 = ARA,
-        Q.3 = ARA,
-        Q.4 = ARA
-    ) %>%
-    select(-ARA) %>%
-    gather(Quarter, ARA,-c(Country, Code, Year)) %>%
-    mutate(Year_Quarter = as.numeric(gsub('Q.', '', Quarter)) + Year * 100) %>%
-    select(-Quarter) %>%
-    mutate(Quarter = yq((as.character(Year_Quarter))) + months(3) - days(1)) %>%
-    select(Country, Code, Quarter, ARA)
+df_ARA_Q <- list()
+df_ARA_Q[['ARA']]<- annual_to_quarter(df_ARA_A[[1]])
 
 ##==========================================
 ##12. Financial Variables
@@ -629,11 +606,11 @@ dt_ARA_Q[['ARA']] <- dt_ARA_A$ARA %>%
 # Equity Market Cap to GDP ratio
 file <- "Input_Financial.xlsx"
 range <- "A3:IV196"
-dt_EQ_MKT_Q <- list()
+df_EQ_MKT_Q <- list()
 sheet <- list()
 sheet[c('Equity_Marketcap_Q')] <- list('Equity_Marketcap_Q')
 
-dt_EQ_MKT_Q <-
+df_EQ_MKT_Q <-
     lapply(
         sheet,
         clean_excel,
@@ -642,13 +619,13 @@ dt_EQ_MKT_Q <-
         range = range,
         freq = "Q"
     )
-dt_EQ_v_GDP <-
-    lapply(dt_EQ_MKT_Q, calc_2_table, dt_GDP, operator = '/')
+df_EQ_v_GDP <-
+    lapply(df_EQ_MKT_Q, calc_2_table, df_GDP, operator = '/')
 
 # Real Stock Market Return
 sheet <- list()
 sheet[c('Equity_Index')] <- list('Equity_Index')
-dt_EQ_Index <-
+df_EQ_Index <-
     lapply(
         sheet,
         clean_excel,
@@ -657,15 +634,16 @@ dt_EQ_Index <-
         range = range,
         freq = "Q"
     )
-dt_EQ_Growth <-
-    lapply(dt_EQ_Index, calc_2_table, dt_CPI, operator = '/')
-dt_EQ_Growth <- lapply(dt_EQ_Growth, calc_growth)
+
+df_EQ_Growth <-
+    lapply(df_EQ_Index, calc_2_table, df_CPI, operator = '/')
+df_EQ_Growth <- lapply(df_EQ_Growth, calc_growth, lags = 4)
 
 # Bond Indices: Sovereign FX debt Spread/ Sovereign Risk Premium/ Government Bond Yield
 sheet <- list()
 sheet[c('EMBIG_Spread', 'CDS_Spread', 'GGR_Yield')] <-
     list('EMBIG_Spread', 'CDS_Spread', 'GGR_Yield')
-dt_Bond <-
+df_Bond <-
     lapply(
         sheet,
         clean_excel,
@@ -674,184 +652,458 @@ dt_Bond <-
         range = range,
         freq = "Q"
     )
+# merge EMBIG spread with CDS spread
+df_Bond$EMBIG_Spread$EMBIG_Spread<-df_Bond$EMBIG_Spread$EMBIG_Spread * 100
+df_spread<- full_join(df_Bond$EMBIG_Spread, df_Bond$CDS_Spread, by = c('Country','Code','Quarter'))
+df_spread[is.na(df_spread$EMBIG_Spread),4]<- df_spread[is.na(df_spread$EMBIG_Spread),5]
+df_Bond[['Sov_Spread']]<- as_tibble(df_spread%>%
+    select(-CDS_Spread)%>%
+    rename(Sov_Spread = EMBIG_Spread))
+
 
 # Asset Volatility
 sheet <- list()
-sheet[c('EQ_Return', 'Spot_Return', 'GGR_Return')] <-
-    list('EQ_Return', 'Spot_Return', 'GGR_Return')
-range="A3:NZ196"
-dt_Asset_Return_M <-
+sheet[c('EQ', 'FX', 'Yield')] <-
+    list('Equity_Index_Level', 'Spot_Rate', 'GGR_Yield')
+
+df_Asset_Level <-
+    lapply(
+        sheet,
+        clean_excel_transpose,
+        folder = daily_price_folder,
+        file = daily_price_file,
+        freq = "D"
+    )
+
+df_Asset_Return <- 
+    lapply( df_Asset_Level, calc_growth, freq ='D', lags =1
+    )
+
+df_Asset_Return$Yield$Level_g<- log(df_Asset_Return$Yield$Level_g / 100 +1) ## Use log return for bond yield
+
+df_Asset_Vol <-
+    lapply(df_Asset_Return, calc_vol, freq = "D", lags = 60)
+
+df_yield <- left_join(df_Asset_Vol$Yield, df_Asset_Level$Yield, by = c('Country','Code','Day'))
+df_yield <- df_yield%>%
+    mutate(newVol = Vol * Level * 100 )%>%
+    select(Country, Code, Day, newVol)%>%
+    rename(Vol = newVol) # Special treatment for bond yield volatility
+
+df_Asset_Vol$Yield <- df_yield
+df_Asset_Vol <- lapply(df_Asset_Vol, rename, Quarter = Day)
+
+# Real Overnight Interbank Rate
+sheet<-list()
+sheet[c('ON_Rate')]<- list("ON_Rate")
+df_ON_Rate <- lapply(sheet, clean_excel, folder = folder,  file = file,  range = range, freq = "Q")
+df_ON_Rate <- lapply(df_ON_Rate, calc_2_table, df_CPI_Growth, operator ='-')
+
+# 3Mo Libor-OIS Spread
+sheet<- list()
+sheet[c('LIBOR_OIS')]<- list("LIBOR_OIS")
+df_LIBOR_OIS <- lapply(sheet, clean_excel, folder = folder,  file = file,  range = range, freq = "Q")
+
+##==========================================
+##13. Financing Needs (Corp & Gov)
+##==========================================
+
+file <- "Input_BOP.xlsx"
+range <- "A6:IV196"
+df_DBT_AMORT <- list()
+sheet <- list()
+sheet[c('FISC_DEF', 'TOT_DBT_AMORT','TOT_GOV_DBT_AMORT','GDP_USD')] <- 
+    list('FISC_DEF_WEO_A','TOT_DBT_AMORT_WEO_A','TOT_GOV_DBT_AMORT_WEO_A','GDP_WEO_A')
+
+df_DBT_AMORT <-
     lapply(
         sheet,
         clean_excel,
         folder = folder,
         file = file,
         range = range,
-        freq = "M"
+        freq = "A"
     )
-dt_Asset_Vol_M <-
-    lapply(dt_Asset_Return_M, calc_vol, freq = "M", lag = 6)
 
-dt_Asset_Vol <-
-    lapply(dt_Asset_Vol_M, filter, month(Month) %in% c(3, 6, 9, 12))
-dt_Asset_Vol <- lapply(dt_Asset_Vol, rename, Quarter = Month)
+df_DBT_AMORT<- lapply(df_DBT_AMORT, annual_to_quarter)
 
-# Real Overnight Interbank Rate
-sheet<-list()
-sheet[c('ON_Rate')]<- list("ON_Rate")
-dt_ON_Rate <- lapply(sheet, clean_excel, folder = folder,  file = file,  range = range, freq = "Q")
-dt_ON_Rate <- lapply(dt_ON_Rate, calc_2_table, dt_CPI_Growth, operator ='-')
+##Corporate external debt amortization to GDP ratio (%)
+df_DBT_AMORT[["TOT_COP_DBT_AMORT"]] <-calc_2_table(df_DBT_AMORT$TOT_DBT_AMORT, df_DBT_AMORT$TOT_GOV_DBT_AMORT, operator = '-')
+df_DBT_AMORT[['COP_DBT_AMORT_v_GDP']]<- calc_2_table(df_DBT_AMORT$TOT_COP_DBT_AMORT, df_DBT_AMORT$GDP_USD, operator = '/')
 
-# 3Mo Libor-OIS Spread
-sheet<- list()
-sheet[c('LIBOR_OIS')]<- list("LIBOR_OIS")
-dt_LIBOR_OIS <- lapply(sheet, clean_excel, folder = folder,  file = file,  range = range, freq = "Q")
+df_DBT_NEED<- list()
+df_DBT_NEED[['COP_DBT_AMORT_v_GDP']] <- df_DBT_AMORT[["COP_DBT_AMORT_v_GDP"]]
+
+## General government financing needs (% of GDP)
+df_DBT_NEED[['GOV_FIN_NEED_v_GDP']]<- calc_2_table(df_DBT_AMORT$TOT_GOV_DBT_AMORT, df_DBT_AMORT$GDP_USD, operator = '/')
+df_DBT_NEED[['GOV_FIN_NEED_v_GDP']]<- calc_2_table(df_DBT_NEED[['GOV_FIN_NEED_v_GDP']],df_DBT_AMORT$FISC_DEF, operator ='+' )
 
 ##==========================================
-## Lastly, Write All results to Excel
+##14. Sectoral Debt Servicing
 ##==========================================
 
-#rename variables
+##====
+## a. Calculate Debt to Equity for HH and Corporates
+##====
 
-names(dt_BL_Private_v_GDP) <-
-    paste("BL_", names(dt_BL_Private_v_GDP), "_v_GDP",  sep = "")
-names(dt_BL_Private_FX_v_TOT) <-
-    paste("BL_", names(dt_BL_Private_FX_v_TOT), '_v_FL',  sep = "")
-names(dt_BL_Private_g) <-
-    paste("BL_", names(dt_BL_Private_g), "_g",  sep = "")
+## Load Debt Data
+file <- "EU_Sectoral_Financial_Accounts.xlsx"
+range <- "A8:IV196"
+df_DBT_SEC_Q <- list()
+sheet <- list()
+sheet[c('HH','NFC')] <- 
+    list('DO_HH_Debt_N_Q','DO_NFC_Debt_N_Q')
 
-names(dt_BL_Public_g) <- "BL_PUB_g"
+df_DBT_SEC_Q <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "Q"
+)
 
-names(dt_BL_ALL_Sector_v_ALL) <-
+df_DBT_SEC_A <- list()
+sheet <- list()
+sheet[c('HH','NFC')] <- 
+    list('DO_HH_Debt_N_A','DO_NFC_Debt_N_A')
+
+df_DBT_SEC_A <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "A"
+)
+
+df_DBT_SEC_MG <- mapply(merge_2_table, tableA = df_DBT_SEC_A, tableQ = df_DBT_SEC_Q, SIMPLIFY =  FALSE)
+
+# Load Equity Data
+
+sheet <- list()
+sheet[c('HH','NFC')]  <- 
+    list('DO_HH_NetWorth_N_Q','DO_NFC_Equity_N_Q')
+
+df_EQ_SEC_Q <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "Q"
+)
+
+df_EQ_SEC_A <- list()
+sheet <- list()
+sheet[c('HH','NFC')]  <- 
+    list('DO_HH_NetWorth_N_A','DO_NFC_Equity_N_A')
+
+df_EQ_SEC_A <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "A"
+)
+
+df_EQ_SEC_MG <- mapply(merge_2_table, tableA = df_EQ_SEC_A, tableQ = df_EQ_SEC_Q, SIMPLIFY =  FALSE)
+
+# Calculate Debt to Equity Ratio
+df_DBT_EQ <- mapply(calc_2_table, table1 = df_DBT_SEC_MG, table2 = df_EQ_SEC_MG, operator ='/', SIMPLIFY = FALSE)
+
+
+##====
+## b. Calculate Debt to Income for HH, Corporates and Government
+##====
+
+# Load Income for all sectors
+file <- "EU_Sectoral_NonFinancial_Accounts.xlsx"
+range <- "A7:IV196"
+df_INC_SEC_Q <- list()
+sheet <- list()
+sheet[c('HH','NFC','GOV')] <- 
+    list('DO_HH_GDI_Adj_N_Q','DO_NFC_GDI_Adj_N_Q','DO_GOV_GDI_Adj_N_Q')
+
+df_INC_SEC_Q <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "Q"
+)
+# Calculate trailing 4-quarter sums
+df_INC_SEC_Q <- lapply(df_INC_SEC_Q, calc_trailing_sum )
+
+# Load annual 
+sheet <- list()
+sheet[c('HH','NFC','GOV')] <- 
+    list('DO_HH_GDI_Adj_N_A','DO_NFC_GDI_Adj_N_A','DO_GOV_GDI_Adj_N_A')
+
+df_INC_SEC_A <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "A"
+)
+##Merging trailing 4 quarter with annual
+df_INC_SEC_MG <- mapply(merge_2_table, tableA = df_INC_SEC_A, tableQ = df_INC_SEC_Q, SIMPLIFY =  FALSE)
+
+## Add GOV to Debt List
+file <- "EU_Sectoral_Financial_Accounts.xlsx"
+range <- "A8:IV196"
+sheet <- 'DO_NFC_Debt_N_Q'
+df_DBT_GOV_Q <- clean_excel(folder = folder, file = file, sheet = sheet,range = range,freq = "Q")
+
+sheet <- 'DO_NFC_Debt_N_A'
+df_DBT_GOV_A <- clean_excel(folder = folder, file = file, sheet = sheet,range = range,freq = "A")
+
+df_DBT_GOV_MG <- merge_2_table(tableA = df_DBT_GOV_A, tableQ = df_DBT_GOV_Q)
+df_DBT_SEC_MG[['GOV']]<- df_DBT_GOV_MG
+
+# Calculate Debt to Income
+df_DBT_v_INC <- mapply(calc_2_table, table1 = df_DBT_SEC_MG, table2 = df_INC_SEC_MG, operator ='/', SIMPLIFY = FALSE)
+
+
+##====
+## c. Calculate Interest Payment to Income
+##====
+
+# Load Interest Expense for all sectors
+file <- "EU_Sectoral_Financial_Accounts.xlsx"
+range <- "A8:IV196"
+df_INT_EXP_Q <- list()
+sheet <- list()
+sheet[c('HH','NFC','GOV')] <- 
+    list('HH_D4G_N_Q','NFC_D4G_N_Q','GOV_D4G_N_Q')
+
+df_INT_EXP_Q <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "Q"
+)
+
+# Calculate trailing 4-quarter sums
+df_INT_EXP_Q <- lapply(df_INT_EXP_Q, calc_trailing_sum )
+
+# Load annual 
+sheet <- list()
+sheet[c('HH','NFC','GOV')] <- 
+    list('HH_D4G_N_A','NFC_D4G_N_A','GOV_D4G_N_A')
+
+df_INT_EXP_A <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "A"
+)
+##Merging trailing 4 quarter with annual
+df_INT_EXP_MG <- mapply(merge_2_table, tableA = df_INT_EXP_A, tableQ = df_INT_EXP_Q, SIMPLIFY =  FALSE)
+
+##Calculate Interest Expense to Income
+df_INT_EXP_v_INC <- mapply(calc_2_table, table1 = df_INT_EXP_MG, table2 = df_INC_SEC_MG, operator ='/', SIMPLIFY = FALSE)
+
+##============================================
+## d. Calculate Interest Rate - Income Growth
+##============================================
+
+## Load interest rate
+file <- "EU_Sectoral_Financial_Accounts.xlsx"
+range <- "A8:IV196"
+df_INT_RT_Q <- list()
+sheet <- list()
+sheet[c('HH','NFC','GOV')] <- 
+    list('DO_HH_INT_RAT_N_Q','DO_NFC_INT_RAT_N_Q','DO_GOV_INT_RAT_N_Q')
+
+df_INT_RT_Q <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "Q"
+)
+
+# Load annual data
+sheet <- list()
+sheet[c('HH','NFC','GOV')] <- 
+    list('DO_HH_INT_RAT_N_A','DO_NFC_INT_RAT_N_A','DO_GOV_INT_RAT_N_A')
+
+df_INT_RT_A <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "A"
+)
+
+# Merge quarterly and annual
+df_INT_RT_MG <- mapply(merge_2_table, tableA = df_INT_RT_A, tableQ = df_INT_RT_Q, SIMPLIFY =  FALSE)
+
+# Calculate income growth
+df_INC_G <- lapply(df_INC_SEC_MG, calc_growth, lags = 4)
+
+# Take difference between Interest Rate and Income Growth
+df_INT_m_INC_G <- mapply(calc_2_table, table1 = df_INT_RT_MG, table2 = df_INC_G, operator ='-', SIMPLIFY =  FALSE)
+
+
+##====================================
+## 15. Probabilty of Default (PD)
+##====================================
+
+## Load PD Data
+file <- "PD_EconomySector_mean.xlsx"
+range <- "A5:IV196"
+df_PD <- list()
+sheet <- list()
+sheet[c('BANK','XBANK','CORP')] <- 
+    list('BANK','XBANK','CORP')
+
+df_PD <- lapply(
+    sheet,
+    clean_excel,
+    folder = folder,
+    file = file,
+    range = range,
+    freq = "Q"
+)
+
+##==========================================
+## Rename Variables
+##==========================================
+
+names(df_BL_Private_v_GDP) <-
+    paste("BL_", names(df_BL_Private_v_GDP), "_v_GDP",  sep = "")
+names(df_BL_Private_FX_v_TOT) <-
+    paste("BL_", names(df_BL_Private_FX_v_TOT), '_v_FL',  sep = "")
+names(df_BL_Private_g) <-
+    paste("BL_", names(df_BL_Private_g), "_g",  sep = "")
+
+names(df_BL_Public_g) <- "BL_PUB_g"
+names(df_BL_ALL_Sector_v_ALL) <-
     paste("BL_",
-          names(dt_BL_ALL_Sector_v_ALL),
+          names(df_BL_ALL_Sector_v_ALL),
           "_v_ALL_BL",
           sep = "")
 
-names(dt_OFIL_Sector_v_GDP) <-
-    paste("OFIL_", names(dt_OFIL_Secotr_g), "_v_GDP",  sep = "")
-names(dt_OFIL_Secotr_g) <-
-    paste("OFIL_", names(dt_OFIL_Secotr_g), "_g",  sep = "")
+names(df_OFIL_Sector_v_GDP) <-
+    paste("OFIL_", names(df_OFIL_Secotr_g), "_v_GDP",  sep = "")
+names(df_OFIL_Secotr_g) <-
+    paste("OFIL_", names(df_OFIL_Secotr_g), "_g",  sep = "")
 
-names(dt_Exn_Debt) <-
-    paste("Exn_Debt_ST_v_ALL_", names(dt_Exn_Debt),  sep = '')
+names(df_Exn_Debt) <-
+    paste("Exn_Debt_ST_v_ALL_", names(df_Exn_Debt),  sep = '')
 
-names(dt_Exn_Debt_Sector_g) <-
-    paste("Exn_Debt_Sector_g_", names(dt_Exn_Debt_Sector_g),  sep = '')
+names(df_Exn_Debt_Sector_g) <-
+    paste("Exn_Debt_Sector_g_", names(df_Exn_Debt_Sector_g),  sep = '')
 
-names(dt_Exn_Debt_ST_v_ALL_Sector) <-
+names(df_Exn_Debt_ST_v_ALL_Sector) <-
     paste("Exn_Debt_ST_v_ALL_",
-          names(dt_Exn_Debt_ST_v_ALL_Sector),
+          names(df_Exn_Debt_ST_v_ALL_Sector),
           sep = '')
 
-names(dt_Exn_Debt_Sector_v_GDP) <-
+names(df_Exn_Debt_Sector_GDP) <-
     paste("Exn_Debt_Sector_v_GDP_",
-          names(dt_Exn_Debt_Sector_v_GDP),
+          names(df_Exn_Debt_Sector_GDP),
           sep = '')
 
-names(dt_Credit_Real_Growth)<- "Credit_Real_Growth"
+names(df_Gov_Debt_v_GDP) <- 'Gov_Debt_v_GDP'
+names(df_Gov_Ext_v_Debt) <- 'Gov_Ext_v_Debt'
+names(df_REER_g) <- 'REER_g'
+names(df_RHP_g) <- 'RHP_g'
+names(df_ARA_Q) <- "ARA"
+names(df_EQ_v_GDP) <- "df_EQ_v_GDP"
+names(df_EQ_Growth) <- "Equity_Growth"
+names(df_EQ_v_GDP) <- "EQ_v_GDP"
+names(df_Asset_Vol) <- paste(names(df_Asset_Vol), "_vol", sep = "")
 
-names(dt_REER_g) <- 'REER_g'
-names(dt_RHP_g) <- 'RHP_g'
+names(df_DBT_EQ) <- paste("DBT_v_EQ_", names(df_DBT_EQ), sep ="")
+names(df_DBT_v_INC)<- paste("DBT_v_INC_", names(df_DBT_v_INC), sep ="")
+names(df_INT_EXP_v_INC)<- paste("INT_Exp_v_INC_", names(df_INT_EXP_v_INC), sep ="")
+names(df_INT_m_INC_G) <- paste("INT_Rate_m_INC_G_", names(df_INT_m_INC_G), sep ="")
 
-names(dt_FB_v_GDP) <-
-    paste(names(dt_FB_v_GDP), "_v_GDP",  sep = '')
+names(df_PD) <- paste("PD36_",names(df_PD), sep ="")
 
-names(dt_ARA_Q) <- "ARA"
-
-names(dt_EQ_v_GDP) <- "dt_EQ_v_GDP"
-
-names(dt_EQ_Growth) <- "Equity_Growth"
-
-names(dt_EQ_v_GDP) <- "EQ_v_GDP"
-
-names(dt_Asset_Vol) <- paste(names(dt_Asset_Vol), "_vol", sep = "")
-
-## Save Raw Data and Percentiles
+##==================================================
+## Save Raw data to Spread Sheet
+##==================================================
 
 saveData = list()
 
 saveData = append(
     saveData,
     c(
-        dt_BL_Private_v_GDP,
-        dt_BL_Private_FX_v_TOT,
-        dt_BL_Private_g,
-        dt_BL_Public_g,
-        dt_BL_ALL_Sector_v_ALL,
-        dt_OFIL_Sector_v_GDP,
-        dt_OFIL_Secotr_g,
-        dt_FSI,
-        dt_Exn_Debt_ST_v_ALL_Sector,
-        dt_Exn_Debt_Sector_g,
-        dt_Exn_Debt_Sector_v_GDP,
-        dt_Gov_Debt_v_GDP,
-        dt_BOP,
-        dt_REER_g,
-        dt_RHP_g,
-        dt_HV,
-        dt_Credit,
-        dt_Credit_Real_Growth,
-        dt_Credit_Growth,
-        dt_ARA_Q,
-        dt_EQ_v_GDP,
-        dt_EQ_Growth,
-        dt_Bond,
-        dt_Asset_Vol,
-        dt_ON_Rate,
-        dt_LIBOR_OIS
+        df_BL_Private_v_GDP,
+        df_BL_Private_FX_v_TOT,
+        df_BL_Private_g,
+        df_BL_Public_g,
+        df_BL_ALL_Sector_v_ALL,
+        df_OFIL_Sector_v_GDP,
+        df_OFIL_Secotr_g,
+        df_FSI,
+        df_Exn_Debt_ST_v_ALL_Sector,
+        df_Exn_Debt_Sector_g,
+        df_Exn_Debt_Sector_GDP,
+        df_Gov_Debt_v_GDP,
+        df_Gov_Ext_v_Debt,
+        df_BOP,
+        df_REER_g,
+        df_RHP_g,
+        df_HV,
+        df_Credit,
+        df_ARA_Q,
+        df_EQ_v_GDP,
+        df_EQ_Growth,
+        df_Bond,
+        df_Asset_Vol,
+        df_ON_Rate,
+        df_LIBOR_OIS,
+        df_DBT_NEED,
+        df_DBT_EQ,
+        df_DBT_v_INC,
+        df_INT_EXP_v_INC,
+        df_INT_m_INC_G,
+        df_PD
     )
 )
 
-saveDataWide <- lapply(saveData, to_wide)
+##==========================================================================
+## Save panel data in R 
+##==========================================================================
 
+# Take care of trading days not including quarter-end days
+saveData<- lapply(saveData, mutate, Quarter = rollback(Quarter+5)) 
+saveData_Panel<- saveData%>%Reduce(function(dtf1,dtf2) full_join(dtf1,dtf2,by=c("Country","Code","Quarter")), .)
+colnames(saveData_Panel)<- c("Country","Code","Quarter", names(saveData))
 
-# #### Save to existing files
-#
-saveFile <- "Q:/DATA/SPRAIMU/4_SysRisk/Data/Result_Raw.xlsx"
+## And merge different country names with same code
+country_code <- saveData_Panel%>%
+    distinct(Country,Code)%>%
+    group_by(Code)%>%
+    summarise_all(min)
 
-wb <- loadWorkbook(saveFile)
-sheetName <- getSheetNames(saveFile)
+saveData_Panel <- saveData_Panel%>%
+    select(-'Country')%>%
+    group_by(Code, Quarter)%>%
+    summarise_all(mean, na.rm = TRUE)
 
-for (n in sheetName[c(2:length(sheetName))]) {
-    writeData(wb, x = saveDataWide[[n]], sheet = n)
-}
+saveData_Panel<- left_join(country_code, saveData_Panel, by = 'Code')
 
-# check consistency and save
-if (! FALSE %in% (names(wb)[2:length(names(wb))] == names(saveDataWide))) {
-    saveWorkbook(wb, saveFile, overwrite = TRUE)
-}
+# Remvoe hidden object other than dataframe, this needs to be done for Tableau to load
+saveData_Panel<- as.data.frame(saveData_Panel) 
+save(saveData_Panel, file = paste(saveFolder, "fulldata_panel.Rda", sep =""))
 
-
-
-# saveFile <- "Q:/DATA/SPRAIMU/4_SysRisk/Data/Result_Percentile.xlsx"
-# wb <- loadWorkbook(saveFile)
-# sheetName <- getSheetNames(saveFile)
-#
-# for (n in sheetName[c(2:57)]) {
-#     writeData(wb, x = savePercentileWide[[n]], sheet = n)
-# }
-#
-# saveWorkbook(wb, saveFile, overwrite = TRUE)
-
-# Save Raw with date
-
-# saveFile = paste(folder, "Result_Raw_", gsub("-", "", today()), ".xlsx", sep =
-#                      '')
-# openxlsx::write.xlsx(saveDataWide, file = saveFile)
-
-
-# #### Calculate and save percentiles
-# 
-# savePercentileWide <-
-#     lapply(saveData, calc_percentile_panel, by_column = TRUE)
-# 
-# names(savePercentileWide) <-
-#     paste(names(savePercentileWide), suffix, sep = "")
-# 
-# saveFile = paste(folder,
-#                  "Result_Percentile_",
-#                  gsub("-", "", today()),
-#                  ".xlsx",
-#                  sep = '')
-# openxlsx::write.xlsx(savePercentileWide, file = saveFile)
+# Save long-format to excel for Tableau processing later
+saveData_Long <- gather(saveData_Panel, "VariableName", "VariableValue", 4:dim(saveData_Panel)[2])
+saveData_Long <- saveData_Long%>%drop_na()
+write.xlsx(saveData_Long, paste(saveFolder,'fulldata_long.xlsx',sep=""))

@@ -4,10 +4,12 @@
 clean_excel <-
     function (folder = "Q:/DATA/SPRAIMU/4_SysRisk/Data/",
               file = "Input_BankLoans.xlsx" ,
-              sheet = "DO_FX_v_All",
+              sheet = "NC_LOANS_HH_Q",
               range = "A5:IV196",
               freq = "Q",
-              cutoff = 19950101) {
+              cutoff = 19950101,
+              raw_shape = "W") {
+        
         library(tidyr)
         library(dplyr)
         library(stringr)
@@ -21,8 +23,10 @@ clean_excel <-
                 path = paste(folder, file, sep = ''),
                 sheet,
                 range,
-                na = c('n.a.', '', '.', '#TSREF!','0')
+                na = c('n.a.', '', '.', '#TSREF!','0','#N/A N/A')
             )
+        
+        dataTable <- dataTable %>% filter(!is.na(Code))
         
         if (freq == 'A') {
             ##Cleaning
@@ -38,8 +42,15 @@ clean_excel <-
                     variable.name = "Year",
                     value.name = sheet
                 )
+            
+            # In case of exception where Year is in the format of excel date
+            if (max(levels(dataTable.long$Year))>2050) {
+                dataTable.long$Year<- year(as.Date(as.numeric(levels(dataTable.long$Year)), origin = "1899-12-30"))
+            }
+            
             dataTable.long$Year <-
                 as.numeric(as.character(dataTable.long$Year))
+            
             dataTable.long <-
                 dataTable.long %>% filter(Year >= 1995 &
                                               Year <= year(today()))
@@ -104,6 +115,14 @@ clean_excel <-
                 dataTable.long %>% filter(Month >= ymd(cutoff) &
                                               Month <= today())
         }
+        
+        # use standardized country names
+        country_code <- read.xlsx('Q:/DATA/SPRAIMU/4_SysRisk/Data/Output/country_code.xlsx')
+
+        dataTable.long<- dataTable.long%>%
+            select(-Country)%>%
+            left_join(country_code, by='Code')%>%
+            select(c(4,1,2,3))
         
         return (dataTable.long)
         
