@@ -8,7 +8,8 @@ clean_excel <-
               range = "A5:IV196",
               freq = "Q",
               cutoff = 19950101,
-              raw_shape = "W") {
+              raw_shape = "W",
+              include_zero = FALSE) {
         
         library(tidyr)
         library(dplyr)
@@ -18,14 +19,26 @@ clean_excel <-
         library(reshape2)
         
         ##Load from Excel sheet
-        dataTable <-
-            readxl::read_xlsx(
-                path = paste(folder, file, sep = ''),
-                sheet,
-                range,
-                na = c('n.a.', '', '.', '#TSREF!','0','#N/A N/A')
-            )
-        
+        if (include_zero == FALSE){
+            dataTable <-
+                readxl::read_xlsx(
+                    path = paste(folder, file, sep = ''),
+                    sheet,
+                    range,
+                    na = c('n.a.', '', '.', '#TSREF!','0','#N/A N/A')
+                    
+                )
+        } else{
+            dataTable <-
+                readxl::read_xlsx(
+                    path = paste(folder, file, sep = ''),
+                    sheet,
+                    range,
+                    na = c('n.a.', '', '.', '#TSREF!','#N/A N/A')
+                    
+                )
+        }
+      
         dataTable <- dataTable %>% filter(!is.na(Code))
         
         if (freq == 'A') {
@@ -40,12 +53,13 @@ clean_excel <-
                 dataTable %>% melt(
                     id.var = c("Country", "Code"),
                     variable.name = "Year",
-                    value.name = sheet
+                    value.name = sheet,
+                    variable.factor = FALSE
                 )
             
             # In case of exception where Year is in the format of excel date
             if (max(levels(dataTable.long$Year))>2050) {
-                dataTable.long$Year<- year(as.Date(as.numeric(levels(dataTable.long$Year)), origin = "1899-12-30"))
+                dataTable.long$Year<- year(as.Date(as.numeric(as.character(dataTable.long$Year)), origin = "1899-12-30"))
             }
             
             dataTable.long$Year <-

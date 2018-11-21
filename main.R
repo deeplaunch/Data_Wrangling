@@ -23,7 +23,7 @@ library(lubridate)
 library(openxlsx)
 
 myfunc <-c('clean_excel.R','clean_excel_transpose.R','back_fill.R','annual_to_quarter.R',
-           'calc_2_table.R','merge_2_table.R',
+           'calc_2_table.R','merge_2_table.R','back_fill.R',
            'calc_trailing_sum.R','calc_growth.R','calc_vol.R',
            'to_wide.R','to_long.R','calc_percentile_panel.R')
 
@@ -98,14 +98,25 @@ df_BL_Private_FX_v_TOT <-
 # Load CPI index
 file <- "Input_CPI.xlsx"
 range <- "A3:IV196"
-df_CPI <-
+df_CPI_Q <-
     clean_excel(
         folder = folder,
         file = file,
-        sheet = "CPI_Q",
+        sheet = "IFS_Q",
         range = range,
         freq = "Q"
     )
+
+df_CPI_A <-
+    clean_excel(
+        folder = folder,
+        file = file,
+        sheet = "IFS_A",
+        range = range,
+        freq = "A"
+    )
+
+df_CPI<- back_fill(tableA = df_CPI_A, tableQ =  df_CPI_Q)
 
 # Calculate real growth
 df_BL_Private_g <-
@@ -397,18 +408,6 @@ df_FX <-
         freq = "Q"
     )
 
-# Load CPI index
-file <- "Input_CPI.xlsx"
-range <- "A3:IV196"
-df_CPI <-
-    clean_excel(
-        folder = folder,
-        file = file,
-        sheet = "CPI_Q",
-        range = range,
-        freq = "Q"
-    )
-
 # Calculate external debt in local currency
 df_Exn_Debt_Sector <-
     lapply(df_Exn_Debt_Sector_USD, calc_2_table, df_FX, operator = '*')
@@ -696,7 +695,7 @@ df_Asset_Vol <- lapply(df_Asset_Vol, rename, Quarter = Day)
 # Real Overnight Interbank Rate
 sheet<-list()
 sheet[c('ON_Rate')]<- list("ON_Rate")
-df_ON_Rate <- lapply(sheet, clean_excel, folder = folder,  file = file,  range = range, freq = "Q")
+df_ON_Rate <- lapply(sheet, clean_excel, folder = folder,  file = file,  range = range, freq = "Q", include_zero = TRUE)
 df_ON_Rate <- lapply(df_ON_Rate, calc_2_table, df_CPI_Growth, operator ='-')
 
 # 3Mo Libor-OIS Spread
@@ -1090,7 +1089,7 @@ colnames(saveData_Panel)<- c("Country","Code","Quarter", names(saveData))
 country_code <- saveData_Panel%>%
     distinct(Country,Code)%>%
     group_by(Code)%>%
-    summarise_all(min)
+    summarise_all(max, na.rm = TRUE)
 
 saveData_Panel <- saveData_Panel%>%
     select(-'Country')%>%

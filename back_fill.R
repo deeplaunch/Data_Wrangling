@@ -37,10 +37,13 @@ back_fill<- function (tableA, tableQ ) {
  
   ###### Fill quarterly result based on annual growth (backward and forward for missing quarterly data)
   
-  table3<- table3%>%select(Code, Year, Quarter, Q, !!symbol[[nameQ]], !!symbol[[nameA_growth]])%>% 
+  table3<- table3%>%select(Country.x, Code, Year, Quarter, Q, !!symbol[[nameQ]], !!symbol[[nameA_growth]])%>% 
     group_by(Code, Q)%>%
     mutate( (!!symbol[[nameQ]]) := back_fill_cols(!!symbol[[nameQ]], !!symbol[[nameA_growth]]))%>%
     ungroup()## replace quarterly with filled column
+  
+  table3<- table3%>%select(Country.x, Code, Quarter, nameQ)%>%
+      rename(Country = Country.x)
   
   return(table3)
   
