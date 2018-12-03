@@ -1098,6 +1098,34 @@ saveData_Panel <- saveData_Panel%>%
 
 saveData_Panel<- left_join(country_code, saveData_Panel, by = 'Code')
 
+# cleaning (see validation file)
+
+saveData_Panel$BL_HH_g[which(saveData_Panel$BL_HH_g>2000)] <- NA
+
+saveData_Panel$BL_ONC_g[which(saveData_Panel$BL_ONC_g>1000)] <- NA
+saveData_Panel$BL_ONC_g[which(saveData_Panel$BL_ONC_g< -99)] <- NA
+
+saveData_Panel$BL_PUB_g[which(saveData_Panel$BL_PUB_g>1000)] <- NA
+saveData_Panel$BL_PUB_g[which(saveData_Panel$BL_PUB_g< -99)] <- NA
+
+saveData_Panel$OFIL_HH_g[which(saveData_Panel$OFIL_HH_g>1000)] <- NA
+saveData_Panel$OFIL_HH_g[which(saveData_Panel$OFIL_HH_g< -99)] <- NA
+
+saveData_Panel$OFIL_ONC_g[which(saveData_Panel$OFIL_ONC_g>1000)] <- NA
+saveData_Panel$OFIL_ONC_g[which(saveData_Panel$OFIL_ONC_g< -99)] <- NA
+
+saveData_Panel$OFIL_PRV_g[which(saveData_Panel$OFIL_PRV_g>1000)] <- NA
+saveData_Panel$OFIL_PRV_g[which(saveData_Panel$OFIL_PRV_g< -99)] <- NA
+
+saveData_Panel$Gov_Debt_v_GDP[which(saveData_Panel$Gov_Debt_v_GDP>1000)] <- NA
+
+saveData_Panel$Gov_Ext_v_Debt[which(saveData_Panel$Gov_Ext_v_Debt>100)] <- NA
+
+View(saveData_Panel%>%filter(FX_vol ==0)%>%group_by(Country)%>%
+       summarize(zeros =n(), earliest = min(Quarter), latest = max(Quarter))%>%
+       arrange(desc(zeros)))
+
+
 # Remvoe hidden object other than dataframe, this needs to be done for Tableau to load
 saveData_Panel<- as.data.frame(saveData_Panel) 
 save(saveData_Panel, file = paste(saveFolder, "fulldata_panel.Rda", sep =""))
@@ -1105,4 +1133,14 @@ save(saveData_Panel, file = paste(saveFolder, "fulldata_panel.Rda", sep =""))
 # Save long-format to excel for Tableau processing later
 saveData_Long <- gather(saveData_Panel, "VariableName", "VariableValue", 4:dim(saveData_Panel)[2])
 saveData_Long <- saveData_Long%>%drop_na()
+
+
+# Calculate Precentiles
+
+saveData_Long<- saveData_Long%>%group_by(VariableName)%>%
+    mutate(Percentile_All_Country = ntile(VariableValue,100))
+
+saveData_Long<- saveData_Long%>%group_by(VariableName,Code)%>%
+    mutate(Percentile_In_Country = ntile(VariableValue,100))
+
 write.xlsx(saveData_Long, paste(saveFolder,'fulldata_long.xlsx',sep=""))
