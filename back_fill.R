@@ -30,9 +30,9 @@ back_fill<- function (tableA, tableQ ) {
   
   tableQ<- tableQ%>%mutate(Year= year(Quarter))
   
-  table3<- tbl_df(full_join(tableA, tableQ, by = c('Code', 'Year')))%>%
+  table3<- tbl_df(full_join(tableQ, tableA, by = c('Code', 'Year')))%>%
     mutate(Q=quarter(Quarter))%>%
-    arrange(Code, Q, Year)
+    arrange(Code, Quarter)
   
  
   ###### Fill quarterly result based on annual growth (backward and forward for missing quarterly data)
