@@ -25,7 +25,7 @@ library(openxlsx)
 myfunc <-c('clean_excel.R','clean_excel_transpose.R','back_fill.R','annual_to_quarter.R',
            'calc_2_table.R','merge_2_table.R','back_fill.R',
            'calc_trailing_sum.R','calc_growth.R','calc_vol.R',
-           'to_wide.R','to_long.R','calc_percentile_panel.R')
+           'to_wide.R','to_long.R','calc_percentile_panel.R','process_for_tableau.R')
 
 lapply(myfunc, source)
 
@@ -855,10 +855,10 @@ df_INC_SEC_MG <- mapply(merge_2_table, tableA = df_INC_SEC_A, tableQ = df_INC_SE
 ## Add GOV to Debt List
 file <- "EU_Sectoral_Financial_Accounts.xlsx"
 range <- "A8:IV196"
-sheet <- 'DO_NFC_Debt_N_Q'
+sheet <- 'DO_GOV_Debt_N_Q'
 df_DBT_GOV_Q <- clean_excel(folder = folder, file = file, sheet = sheet,range = range,freq = "Q")
 
-sheet <- 'DO_NFC_Debt_N_A'
+sheet <- 'DO_GOV_Debt_N_A'
 df_DBT_GOV_A <- clean_excel(folder = folder, file = file, sheet = sheet,range = range,freq = "A")
 
 df_DBT_GOV_MG <- merge_2_table(tableA = df_DBT_GOV_A, tableQ = df_DBT_GOV_Q)
@@ -1130,17 +1130,4 @@ View(saveData_Panel%>%filter(FX_vol ==0)%>%group_by(Country)%>%
 saveData_Panel<- as.data.frame(saveData_Panel) 
 save(saveData_Panel, file = paste(saveFolder, "fulldata_panel.Rda", sep =""))
 
-# Save long-format to excel for Tableau processing later
-saveData_Long <- gather(saveData_Panel, "VariableName", "VariableValue", 4:dim(saveData_Panel)[2])
-saveData_Long <- saveData_Long%>%drop_na()
-
-
-# Calculate Precentiles
-
-saveData_Long<- saveData_Long%>%group_by(VariableName)%>%
-    mutate(Percentile_All_Country = ntile(VariableValue,100))
-
-saveData_Long<- saveData_Long%>%group_by(VariableName,Code)%>%
-    mutate(Percentile_In_Country = ntile(VariableValue,100))
-
-write.xlsx(saveData_Long, paste(saveFolder,'fulldata_long.xlsx',sep=""))
+process_for_tableau()
