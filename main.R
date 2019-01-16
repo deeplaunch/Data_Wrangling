@@ -1,11 +1,10 @@
-
-##Main scripts that call individual data/ functions to produce varuos SysRi results in percentiles and raw
-## Load, clean, manipulate, and save results
-
 ##@Auther: Harry Peng Zhao
 
+##===Main scripts that call individual data/ functions to produce various System Risk indicators===
+##===Load, clean, manipulate, and save results to R and Excel for Tableau processing===##
+
 ##===========================================
-##0. Setup
+## 0. Setup
 ##===========================================
 
 rm(list = ls())
@@ -22,12 +21,9 @@ library(stringr)
 library(lubridate)
 library(openxlsx)
 
-myfunc <-c('clean_excel.R','clean_excel_transpose.R','back_fill.R','annual_to_quarter.R',
-           'calc_2_table.R','merge_2_table.R','back_fill.R',
-           'calc_trailing_sum.R','calc_growth.R','calc_vol.R',
-           'to_wide.R','to_long.R','calc_percentile_panel.R','process_for_tableau.R')
+myfunc <-c('load_and_clean.R','single_table_func.R','reshaping.R','two_table_func.R','process_for_tableau.R')
 
-lapply(myfunc, source)
+lapply(myfunc, source, verbose = FALSE)
 
 ##==========================================
 ## 1.1 Bank Loan by Private Sector to GDP
@@ -391,7 +387,6 @@ df_Exn_Debt_ST_v_ALL_Sector['OTH'] <-
     list(calc_2_table(df_Exn_Debt_ST$OTH, df_Exn_Debt_Sector_USD$OTH, operator =
                           '/'))
 
-
 ##==============================================
 ##6.2 External Debt Growth adjusted by CPI index
 ##==============================================
@@ -560,7 +555,7 @@ df_Credit <-
 df_CPI_Growth <- calc_growth(df_CPI, lags= 4) #calculate yoy growth
 Credit_Real_Growth <- lapply(df_Credit[5], calc_2_table, df_CPI_Growth, operator ='-')
 df_Credit["Credit_Real_Growth"]<- Credit_Real_Growth 
-    
+
 # Calculate Flags by Del'Ariccia
 Credit_Flag1 <- full_join(df_Credit$Credit_Gap_Cubic, df_Credit$Credit_GDP_Growth, by =c('Country','Code','Quarter'))
 
@@ -656,8 +651,8 @@ df_Bond$EMBIG_Spread$EMBIG_Spread<-df_Bond$EMBIG_Spread$EMBIG_Spread * 100
 df_spread<- full_join(df_Bond$EMBIG_Spread, df_Bond$CDS_Spread, by = c('Country','Code','Quarter'))
 df_spread[is.na(df_spread$EMBIG_Spread),4]<- df_spread[is.na(df_spread$EMBIG_Spread),5]
 df_Bond[['Sov_Spread']]<- as_tibble(df_spread%>%
-    select(-CDS_Spread)%>%
-    rename(Sov_Spread = EMBIG_Spread))
+                                        select(-CDS_Spread)%>%
+                                        rename(Sov_Spread = EMBIG_Spread))
 
 
 # Asset Volatility
@@ -727,15 +722,19 @@ df_DBT_AMORT <-
 df_DBT_AMORT<- lapply(df_DBT_AMORT, annual_to_quarter)
 
 ##Corporate external debt amortization to GDP ratio (%)
-df_DBT_AMORT[["TOT_COP_DBT_AMORT"]] <-calc_2_table(df_DBT_AMORT$TOT_DBT_AMORT, df_DBT_AMORT$TOT_GOV_DBT_AMORT, operator = '-')
-df_DBT_AMORT[['COP_DBT_AMORT_v_GDP']]<- calc_2_table(df_DBT_AMORT$TOT_COP_DBT_AMORT, df_DBT_AMORT$GDP_USD, operator = '/')
+df_DBT_AMORT[["TOT_COP_DBT_AMORT"]] <-
+    calc_2_table(df_DBT_AMORT$TOT_DBT_AMORT, df_DBT_AMORT$TOT_GOV_DBT_AMORT, operator = '-')
+df_DBT_AMORT[['COP_DBT_AMORT_v_GDP']]<- 
+    calc_2_table(df_DBT_AMORT$TOT_COP_DBT_AMORT, df_DBT_AMORT$GDP_USD, operator = '/')
 
 df_DBT_NEED<- list()
 df_DBT_NEED[['COP_DBT_AMORT_v_GDP']] <- df_DBT_AMORT[["COP_DBT_AMORT_v_GDP"]]
 
 ## General government financing needs (% of GDP)
-df_DBT_NEED[['GOV_FIN_NEED_v_GDP']]<- calc_2_table(df_DBT_AMORT$TOT_GOV_DBT_AMORT, df_DBT_AMORT$GDP_USD, operator = '/')
-df_DBT_NEED[['GOV_FIN_NEED_v_GDP']]<- calc_2_table(df_DBT_NEED[['GOV_FIN_NEED_v_GDP']],df_DBT_AMORT$FISC_DEF, operator ='+' )
+df_DBT_NEED[['GOV_FIN_NEED_v_GDP']]<- 
+    calc_2_table(df_DBT_AMORT$TOT_GOV_DBT_AMORT, df_DBT_AMORT$GDP_USD, operator = '/')
+df_DBT_NEED[['GOV_FIN_NEED_v_GDP']]<- 
+    calc_2_table(df_DBT_NEED[['GOV_FIN_NEED_v_GDP']],df_DBT_AMORT$FISC_DEF, operator ='+' )
 
 ##==========================================
 ##14. Sectoral Debt Servicing
@@ -776,7 +775,8 @@ df_DBT_SEC_A <- lapply(
     freq = "A"
 )
 
-df_DBT_SEC_MG <- mapply(merge_2_table, tableA = df_DBT_SEC_A, tableQ = df_DBT_SEC_Q, SIMPLIFY =  FALSE)
+df_DBT_SEC_MG <- 
+    mapply(merge_2_table, tableA = df_DBT_SEC_A, tableQ = df_DBT_SEC_Q, SIMPLIFY =  FALSE)
 
 # Load Equity Data
 
@@ -807,15 +807,17 @@ df_EQ_SEC_A <- lapply(
     freq = "A"
 )
 
-df_EQ_SEC_MG <- mapply(merge_2_table, tableA = df_EQ_SEC_A, tableQ = df_EQ_SEC_Q, SIMPLIFY =  FALSE)
+df_EQ_SEC_MG <- 
+    mapply(merge_2_table, tableA = df_EQ_SEC_A, tableQ = df_EQ_SEC_Q, SIMPLIFY =  FALSE)
 
 # Calculate Debt to Equity Ratio
-df_DBT_EQ <- mapply(calc_2_table, table1 = df_DBT_SEC_MG, table2 = df_EQ_SEC_MG, operator ='/', SIMPLIFY = FALSE)
+df_DBT_EQ <- 
+    mapply(calc_2_table, table1 = df_DBT_SEC_MG, table2 = df_EQ_SEC_MG, operator ='/', SIMPLIFY = FALSE)
 
 
-##====
+##================================================================
 ## b. Calculate Debt to Income for HH, Corporates and Government
-##====
+##================================================================
 
 # Load Income for all sectors
 file <- "EU_Sectoral_NonFinancial_Accounts.xlsx"
@@ -850,7 +852,8 @@ df_INC_SEC_A <- lapply(
     freq = "A"
 )
 ##Merging trailing 4 quarter with annual
-df_INC_SEC_MG <- mapply(merge_2_table, tableA = df_INC_SEC_A, tableQ = df_INC_SEC_Q, SIMPLIFY =  FALSE)
+df_INC_SEC_MG <- 
+    mapply(merge_2_table, tableA = df_INC_SEC_A, tableQ = df_INC_SEC_Q, SIMPLIFY =  FALSE)
 
 ## Add GOV to Debt List
 file <- "EU_Sectoral_Financial_Accounts.xlsx"
@@ -865,12 +868,13 @@ df_DBT_GOV_MG <- merge_2_table(tableA = df_DBT_GOV_A, tableQ = df_DBT_GOV_Q)
 df_DBT_SEC_MG[['GOV']]<- df_DBT_GOV_MG
 
 # Calculate Debt to Income
-df_DBT_v_INC <- mapply(calc_2_table, table1 = df_DBT_SEC_MG, table2 = df_INC_SEC_MG, operator ='/', SIMPLIFY = FALSE)
+df_DBT_v_INC <- 
+    mapply(calc_2_table, table1 = df_DBT_SEC_MG, table2 = df_INC_SEC_MG, operator ='/', SIMPLIFY = FALSE)
 
 
-##====
+##============================================
 ## c. Calculate Interest Payment to Income
-##====
+##============================================
 
 # Load Interest Expense for all sectors
 file <- "EU_Sectoral_Financial_Accounts.xlsx"
@@ -906,10 +910,12 @@ df_INT_EXP_A <- lapply(
     freq = "A"
 )
 ##Merging trailing 4 quarter with annual
-df_INT_EXP_MG <- mapply(merge_2_table, tableA = df_INT_EXP_A, tableQ = df_INT_EXP_Q, SIMPLIFY =  FALSE)
+df_INT_EXP_MG <- 
+    mapply(merge_2_table, tableA = df_INT_EXP_A, tableQ = df_INT_EXP_Q, SIMPLIFY =  FALSE)
 
 ##Calculate Interest Expense to Income
-df_INT_EXP_v_INC <- mapply(calc_2_table, table1 = df_INT_EXP_MG, table2 = df_INC_SEC_MG, operator ='/', SIMPLIFY = FALSE)
+df_INT_EXP_v_INC <- 
+    mapply(calc_2_table, table1 = df_INT_EXP_MG, table2 = df_INC_SEC_MG, operator ='/', SIMPLIFY = FALSE)
 
 ##============================================
 ## d. Calculate Interest Rate - Income Growth
@@ -953,8 +959,8 @@ df_INT_RT_MG <- mapply(merge_2_table, tableA = df_INT_RT_A, tableQ = df_INT_RT_Q
 df_INC_G <- lapply(df_INC_SEC_MG, calc_growth, lags = 4)
 
 # Take difference between Interest Rate and Income Growth
-df_INT_m_INC_G <- mapply(calc_2_table, table1 = df_INT_RT_MG, table2 = df_INC_G, operator ='-', SIMPLIFY =  FALSE)
-
+df_INT_m_INC_G <- 
+    mapply(calc_2_table, table1 = df_INT_RT_MG, table2 = df_INC_G, operator ='-', SIMPLIFY =  FALSE)
 
 ##====================================
 ## 15. Probabilty of Default (PD)
@@ -978,7 +984,7 @@ df_PD <- lapply(
 )
 
 ##==========================================
-## Rename Variables
+## 16. Rename Variables
 ##==========================================
 
 names(df_BL_Private_v_GDP) <-
@@ -1033,9 +1039,9 @@ names(df_INT_m_INC_G) <- paste("INT_Rate_m_INC_G_", names(df_INT_m_INC_G), sep =
 
 names(df_PD) <- paste("PD36_",names(df_PD), sep ="")
 
-##==================================================
-## Save Raw data to Spread Sheet
-##==================================================
+##===================================================================
+## 17. Data Cleaning
+##===================================================================
 
 saveData = list()
 
@@ -1076,13 +1082,11 @@ saveData = append(
     )
 )
 
-##==========================================================================
-## Save panel data in R 
-##==========================================================================
 
 # Take care of trading days not including quarter-end days
 saveData<- lapply(saveData, mutate, Quarter = rollback(Quarter+5)) 
-saveData_Panel<- saveData%>%Reduce(function(dtf1,dtf2) full_join(dtf1,dtf2,by=c("Country","Code","Quarter")), .)
+saveData_Panel<- 
+    saveData%>%Reduce(function(dtf1,dtf2) full_join(dtf1,dtf2,by=c("Country","Code","Quarter")), .)
 colnames(saveData_Panel)<- c("Country","Code","Quarter", names(saveData))
 
 ## And merge different country names with same code
@@ -1122,12 +1126,16 @@ saveData_Panel$Gov_Debt_v_GDP[which(saveData_Panel$Gov_Debt_v_GDP>1000)] <- NA
 saveData_Panel$Gov_Ext_v_Debt[which(saveData_Panel$Gov_Ext_v_Debt>100)] <- NA
 
 View(saveData_Panel%>%filter(FX_vol ==0)%>%group_by(Country)%>%
-       summarize(zeros =n(), earliest = min(Quarter), latest = max(Quarter))%>%
-       arrange(desc(zeros)))
+         summarize(zeros =n(), earliest = min(Quarter), latest = max(Quarter))%>%
+         arrange(desc(zeros)))
 
+saveData_Panel <- saveData_Panel%>%filter(Quarter < today())
 
-# Remvoe hidden object other than dataframe, this needs to be done for Tableau to load
+##===================================================================
+## 18. Save panel data in R and long data in Excel for Tableau
+##===================================================================
+# Remvoe hidden object other than dataframe, this needs to be done for Tableau to load 
 saveData_Panel<- as.data.frame(saveData_Panel) 
 save(saveData_Panel, file = paste(saveFolder, "fulldata_panel.Rda", sep =""))
-
+# Process results for Tableau
 process_for_tableau()
