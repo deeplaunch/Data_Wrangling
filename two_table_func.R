@@ -1,6 +1,6 @@
 ####Takes two tables, do calculations (+, /, *), return the resulted table ####
 
-calc_2_table<- function (table1, table2, operator, removeNa = TRUE) {
+calc_2_table<- function (table1, table2, operator, removeNA = TRUE) {
  
     table3<- tbl_df(full_join(table1, table2, by = c('Country', 'Code', 'Quarter')))
     
@@ -10,7 +10,7 @@ calc_2_table<- function (table1, table2, operator, removeNa = TRUE) {
     
     
     if(operator == '+'){
-        x <- rowSums(cbind(table3[name1], table3[name2]), na.rm = removeNa)
+        x <- rowSums(cbind(table3[name1], table3[name2]), na.rm = removeNA)
         table4<- table3%>%mutate(!!sym(name3):= x)         ##Use symbol variables & !! for dynamic naming
         table4[name3][which(table4[name3]== 0),1]<- NA
     }else if (operator =='/'){

@@ -44,7 +44,7 @@ process_for_tableau <- function(){
     
     saveData_Long<- left_join(saveData_Long, df_country_group, by =c('Code'))
     
-    # Calculate Precentiles within country and within country group (call it "All_Group")
+    # Calculate Precentiles within country, within country group (call it "All_Group") and rest of the world ("World")
     
     saveData_Long<- saveData_Long%>%
         group_by(VariableName,Group)%>%
@@ -56,9 +56,14 @@ process_for_tableau <- function(){
         mutate(Percentile_In_Country = ntile(VariableValue,100))%>%
         ungroup()
     
+    saveData_Long<- saveData_Long%>%
+        group_by(VariableName)%>%
+        mutate(Percentile_World = ntile(VariableValue,100))%>%
+        ungroup()
+    
     # Calculate High Risk Flag (most recent risk >80 or change in risk >20)
     
-    # Merge with variable grou mapping
+    # Merge with variable group mapping
     
     df_variable_group <- readxl::read_xlsx(
         path = mapping_file,
@@ -85,6 +90,7 @@ process_for_tableau <- function(){
     saveData_Long[which(saveData_Long$RiskDirection =='-'),'Ptile_1'] <- 101 - saveData_Long[which(saveData_Long$RiskDirection =='-'),'Ptile_1']
     # Flip Change to -  if Risk Direction is '-' 
     saveData_Long[which(saveData_Long$RiskDirection =='-'),'PtileChange'] <- (- saveData_Long[which(saveData_Long$RiskDirection =='-'),'PtileChange'])
+    
     
     saveData_Long<- saveData_Long%>%
         mutate(RiskFlag = Ptile_1 >=80 | PtileChange >=20 )

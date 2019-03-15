@@ -20,7 +20,7 @@ clean_excel <-
         library(reshape2)
         
         ##Load from Excel sheet
-        if (include_zero == FALSE){
+        if (include_zero == FALSE){ # Treat 0 as NA
             dataTable <-
                 readxl::read_xlsx(
                     path = paste(folder, file, sep = ''),
@@ -29,7 +29,7 @@ clean_excel <-
                     na = c('n.a.', '', '.', '#TSREF!','0','#N/A N/A')
                     
                 )
-        } else{
+        } else{ # Treat 0 as 0
             dataTable <-
                 readxl::read_xlsx(
                     path = paste(folder, file, sep = ''),

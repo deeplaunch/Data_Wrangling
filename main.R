@@ -29,14 +29,14 @@ lapply(myfunc, source, verbose = FALSE)
 ## 1.1 Bank Loan by Private Sector to GDP
 ##==========================================
 
-# Load GDP
+# Load GDP (already annualized)
 file <- "Input_GDP.xlsx"
-range <- "A3:IV196"
+range <- "A3:IV200"
 df_GDP <-
     clean_excel(
         folder = folder,
         file = file,
-        sheet = "GDP_Q",
+        sheet = "GDP",
         range = range,
         freq = "Q"
     )
@@ -174,6 +174,9 @@ df_BL_ALL <- calc_2_table(df_BL_ALL, df_BL_ALL_Sector$PUB, '+')
 df_BL_ALL_Sector_v_ALL <-
     lapply(df_BL_ALL_Sector, calc_2_table, df_BL_ALL, operator = '/')
 
+# Below is to avoid cases where shares are 100% because other sectors are NAs
+df_BL_ALL_Sector_v_ALL <-
+    lapply(df_BL_ALL_Sector_v_ALL, replace_value, value = 100) 
 
 ##==========================================================
 ##3.1 Other Financial Institution Loan by Sector to GDP
@@ -351,32 +354,29 @@ df_Exn_Debt <-
         folder = folder,
         file = file,
         range = range,
-        freq = "Q"
+        freq = "Q",
+        include_zero = TRUE
     )
 
-# Add up loans and securities for ST and LT in each sector
+# Add up loans and securities for ST and LT in each sector, make total NA if any sub-category is NA using removeNA = FALSE
 df_Exn_Debt_ST <- list()
 df_Exn_Debt_ST["GOV"] <-
-    list(calc_2_table(df_Exn_Debt$SEC_ST_GOV, df_Exn_Debt$LOAN_ST_GOV, operator =
-                          '+'))
+    list(calc_2_table(df_Exn_Debt$SEC_ST_GOV, df_Exn_Debt$LOAN_ST_GOV, operator ='+', removeNA = FALSE))
 df_Exn_Debt_ST["OTH"] <-
-    list(calc_2_table(df_Exn_Debt$SEC_ST_OTH, df_Exn_Debt$LOAN_ST_OTH, operator =
-                          '+'))
+    list(calc_2_table(df_Exn_Debt$SEC_ST_OTH, df_Exn_Debt$LOAN_ST_OTH, operator ='+', removeNA = FALSE))
 
 df_Exn_Debt_LT <- list()
 df_Exn_Debt_LT["GOV"] <-
-    list(calc_2_table(df_Exn_Debt$SEC_LT_GOV, df_Exn_Debt$LOAN_LT_GOV, operator =
-                          '+'))
+    list(calc_2_table(df_Exn_Debt$SEC_LT_GOV, df_Exn_Debt$LOAN_LT_GOV, operator = '+', removeNA = FALSE))
 df_Exn_Debt_LT["OTH"] <-
-    list(calc_2_table(df_Exn_Debt$SEC_LT_OTH, df_Exn_Debt$LOAN_LT_OTH, operator =
-                          '+'))
+    list(calc_2_table(df_Exn_Debt$SEC_LT_OTH, df_Exn_Debt$LOAN_LT_OTH, operator ='+', removeNA = FALSE))
 
 # Add up ST and LT in each sector
 df_Exn_Debt_Sector_USD <- list()
 df_Exn_Debt_Sector_USD["GOV"] <-
-    list(calc_2_table(df_Exn_Debt_ST$GOV, df_Exn_Debt_LT$GOV, operator = '+'))
+    list(calc_2_table(df_Exn_Debt_ST$GOV, df_Exn_Debt_LT$GOV, operator = '+', removeNA = FALSE))
 df_Exn_Debt_Sector_USD["OTH"] <-
-    list(calc_2_table(df_Exn_Debt_ST$OTH, df_Exn_Debt_LT$OTH, operator = '+'))
+    list(calc_2_table(df_Exn_Debt_ST$OTH, df_Exn_Debt_LT$OTH, operator = '+', removeNA = FALSE))
 
 # Calculate Short-Term Debt as % of Total External Debt for each sector (Loans & Debt Securities)
 df_Exn_Debt_ST_v_ALL_Sector <- list()
@@ -538,10 +538,11 @@ df_HV <-
 
 # Load Credit Gap, etc
 file <- 'Input_CreditGDP.xlsx'
+range <- 'A3:IV200'
 sheet <- list()
 sheet[c('Credit_Gap_HP', 'Credit_GDP_Change','Credit_GDP_Growth','Credit_Gap_Cubic','Credit_Growth')] <-
     list('Credit_Gap_HP', 'Credit_GDP_Change','Credit_GDP_Growth','Credit_Gap_Cubic','Credit_Growth')
-df_Credit <-
+df_Credit <- 
     lapply(
         sheet,
         clean_excel,
@@ -575,23 +576,23 @@ df_Credit['Flag2'] <- list(Credit_Flag2)
 ##==========================================
 
 # Load ARA Metric
-file <- "SPRIRU_ARA_METRIC.xlsx"
-range <- "G201:IV396"
-sheet <- list()
-sheet[c('ARA_A')] <- list('ARA')
-df_ARA_A <-
-    lapply(
-        sheet,
-        clean_excel,
-        folder = folder,
-        file = file,
-        range = range,
-        freq = "A"
-    )
-
-#Convert annual data to quarterly data
-df_ARA_Q <- list()
-df_ARA_Q[['ARA']]<- annual_to_quarter(df_ARA_A[[1]])
+# file <- "SPRIRU_ARA_METRIC.xlsx"
+# range <- "G201:IV396"
+# sheet <- list()
+# sheet[c('ARA_A')] <- list('ARA')
+# df_ARA_A <-
+#     lapply(
+#         sheet,
+#         clean_excel,
+#         folder = folder,
+#         file = file,
+#         range = range,
+#         freq = "A"
+#     )
+# 
+# #Convert annual data to quarterly data
+# df_ARA_Q <- list()
+# df_ARA_Q[['ARA']]<- annual_to_quarter(df_ARA_A[[1]])
 
 ##==========================================
 ##12. Financial Variables
@@ -734,7 +735,7 @@ df_DBT_NEED[['COP_DBT_AMORT_v_GDP']] <- df_DBT_AMORT[["COP_DBT_AMORT_v_GDP"]]
 df_DBT_NEED[['GOV_FIN_NEED_v_GDP']]<- 
     calc_2_table(df_DBT_AMORT$TOT_GOV_DBT_AMORT, df_DBT_AMORT$GDP_USD, operator = '/')
 df_DBT_NEED[['GOV_FIN_NEED_v_GDP']]<- 
-    calc_2_table(df_DBT_NEED[['GOV_FIN_NEED_v_GDP']],df_DBT_AMORT$FISC_DEF, operator ='+' )
+    calc_2_table(df_DBT_NEED[['GOV_FIN_NEED_v_GDP']],df_DBT_AMORT$FISC_DEF, operator ='-' )
 
 ##==========================================
 ##14. Sectoral Debt Servicing
@@ -1026,7 +1027,7 @@ names(df_Gov_Debt_v_GDP) <- 'Gov_Debt_v_GDP'
 names(df_Gov_Ext_v_Debt) <- 'Gov_Ext_v_Debt'
 names(df_REER_g) <- 'REER_g'
 names(df_RHP_g) <- 'RHP_g'
-names(df_ARA_Q) <- "ARA"
+# names(df_ARA_Q) <- "ARA"
 names(df_EQ_v_GDP) <- "df_EQ_v_GDP"
 names(df_EQ_Growth) <- "Equity_Growth"
 names(df_EQ_v_GDP) <- "EQ_v_GDP"
@@ -1066,7 +1067,7 @@ saveData = append(
         df_RHP_g,
         df_HV,
         df_Credit,
-        df_ARA_Q,
+        #df_ARA_Q,
         df_EQ_v_GDP,
         df_EQ_Growth,
         df_Bond,
