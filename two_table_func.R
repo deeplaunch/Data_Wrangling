@@ -66,7 +66,7 @@ merge_2_table<- function (tableA, tableQ ) {
 ####return the back-filled quarterly table ####
 
 back_fill_cols<- function(fill_col, growth_col) {
-    ####Back fill a list based on growth list (first backwaerd, then forward) ###
+    #### Back fill a list based on growth list (first backwaerd, then forward) ###
     #### return the back-filled list #### 
     
     ##Fill backward (up)
@@ -77,7 +77,6 @@ back_fill_cols<- function(fill_col, growth_col) {
     }
     
     ##Fill forward (down)
-    
     for (i in (2: length(fill_col))) {
         if (is.na(fill_col[i])){
             fill_col[i] <- fill_col[i-1] * (1 + growth_col[i])
@@ -120,8 +119,10 @@ back_fill<- function (tableA, tableQ ) {
     
     ###### Fill quarterly result based on annual growth (backward and forward for missing quarterly data)
     
-    table3<- table3%>%select(Country.x, Code, Year, Quarter, Q, !!symbol[[nameQ]], !!symbol[[nameA_growth]])%>% 
-        group_by(Code, Q)%>%
+    table3<- table3%>%
+        select(Country.x, Code, Year, Quarter, Q, !!symbol[[nameQ]], !!symbol[[nameA_growth]])%>%
+        arrange(Code, Quarter)%>%
+        group_by(Code)%>%
         mutate( (!!symbol[[nameQ]]) := back_fill_cols(!!symbol[[nameQ]], !!symbol[[nameA_growth]]))%>%
         ungroup()## replace quarterly with filled column
     
