@@ -42,7 +42,6 @@ colnames(coef_df_list$pval) = c('Source', 'Sink', 'Period', 'pval')
 coef_df = Reduce( function(df1,df2) full_join(df1, df2, by = c('Source','Sink','Period')), coef_df_list)
 
 # Save
-
 write.xlsx(coef_df, 'fulldata_long.xlsx')
 
 # process the other rolling results tables
