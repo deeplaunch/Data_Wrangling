@@ -3,7 +3,7 @@
 ### R : Data Mining and Cleansing 
 dplyr, tidyr, panel regression, clustering
 
-### Python: 
+### Python: Data Structure
 Pandas
 Dictionary
 List
