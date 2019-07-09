@@ -4,7 +4,7 @@
 dplyr, tidyr, panel regression, clustering
 
 ### Python: Data Structure
-Pandas
-Dictionary
-List
+Pandas,
+Dictionary,
+List/Numpy
 String
