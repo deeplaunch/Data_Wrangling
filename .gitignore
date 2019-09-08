@@ -1,0 +1,20 @@
+## add ignore files 
+*$py.class
+*.pb
+*.pyc
+*.pkl
+*.p
+*.h5
+*.pickle
+*.csv
+*.DS_Store
+*.xlsx
+*.xls
+*.w2v
+
+## add data folder 
+*data/
+*.ipynb_checkpoints/
+*.__pycache__/
+*checkpoints/
+*model/
